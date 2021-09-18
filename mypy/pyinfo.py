@@ -6,8 +6,10 @@ Python being executed, this module should not use *any* dependencies outside of 
 library found in Python 2. This file is run each mypy run, so it should be kept as fast as
 possible.
 """
+import os
 import site
 import sys
+import sysconfig
 
 if __name__ == '__main__':
     sys.path = sys.path[1:]  # we don't want to pick up mypy.types
@@ -17,12 +19,27 @@ if MYPY:
     from typing import List, Tuple
 
 
-def getprefixes():
-    # type: () -> Tuple[str, str]
-    return getattr(sys, "base_prefix", sys.prefix), sys.prefix
+def getsearchdirs():
+    # type: () -> Tuple[List[str], List[str]]
+    site_packages = _getsitepackages()
+
+    # Do not include things from the standard library
+    # because those should come from typeshed.
+    stdlib_zip = os.path.join(
+        sys.base_exec_prefix,
+        getattr(sys, "platlibdir", "lib"),
+        "python{}{}.zip".format(sys.version_info.major, sys.version_info.minor)
+    )
+    stdlib = sysconfig.get_path("stdlib")
+    stdlib_ext = os.path.join(stdlib, "lib-dynload")
+    cwd = os.path.abspath(os.getcwd())
+    excludes = set(site_packages + [cwd, stdlib_zip, stdlib, stdlib_ext])
+
+    abs_sys_path = (os.path.abspath(p) for p in sys.path)
+    return (site_packages, [p for p in abs_sys_path if p not in excludes])
 
 
-def getsitepackages():
+def _getsitepackages():
     # type: () -> List[str]
     res = []
     if hasattr(site, 'getsitepackages'):
@@ -37,10 +54,8 @@ def getsitepackages():
 
 
 if __name__ == '__main__':
-    if sys.argv[-1] == 'getsitepackages':
-        print(repr(getsitepackages()))
-    elif sys.argv[-1] == 'getprefixes':
-        print(repr(getprefixes()))
+    if sys.argv[-1] == 'getsearchdirs':
+        print(repr(getsearchdirs()))
     else:
         print("ERROR: incorrect argument to pyinfo.py.", file=sys.stderr)
         sys.exit(1)
